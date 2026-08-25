@@ -1,71 +1,88 @@
 # oficina
 
-shadcn-compatible registry for Grok Bot templates.
+A thin exporter that writes a Grok Bot factory as a shadcn `registry:block`, plus one fictional example item (`orchestrator`).
 
-Install templates with the official [shadcn CLI](https://ui.shadcn.com/docs/cli) from this GitHub repository. There is no `oficina add`, `oficina publish`, custom domain, or other custom installer.
+This repository is the tool. It is not the catalog friends install from, and you do not send a pull request here to share a factory. There is no `oficina add`, `oficina publish`, custom domain, or pastecn.com upload.
 
-## Install
+## Friend flow
 
-```bash
-npx shadcn@latest add franklinjavier/oficina/<item>
-```
+Account A exports locally, pushes the block to **their** public GitHub repo, and sends Account B the `owner/repo/item` address. Account B installs with the official [shadcn CLI](https://ui.shadcn.com/docs/cli) and applies the files in Grok Bot. Nobody else is in that loop.
 
-Example:
+## Export (account A)
 
-```bash
-npx shadcn@latest add franklinjavier/oficina/orchestrator
-```
-
-That command writes `oficina/bots/orchestrator/*` under the directory where it runs. In shadcn `files[].target`, `~/` is the project cwd, not `$HOME`.
-
-Pin a branch, tag, or commit SHA when you need a fixed revision:
+From a Grok Bot agent folder, or a parent that contains many agents:
 
 ```bash
-npx shadcn@latest add franklinjavier/oficina/orchestrator#main
+npx tsx scripts/export-factory.ts --from <path-to-grok-bot-agent-dir> --name <item-slug>
 ```
 
-Preview without writing files:
+That writes a `registry:block` to `registry/<item-slug>/` and updates `registry.json` in the current directory (`--out` to pick another repo root). It copies the safe agent tree: profile, avatar, sanitized settings, automations/routines, skill files that live with the agent, and other non-secret files.
+
+It does not copy `memory/`, transcripts, `factory.db`, `store.db`, credentials, or connector tokens. Token-looking strings, emails, and webhook keys are stripped. The command refuses (and `--dry-run` reports) if the source still looks like it contains credentials.
+
+Preview without writing:
 
 ```bash
-npx shadcn@latest add franklinjavier/oficina/orchestrator --dry-run
+npx tsx scripts/export-factory.ts --from <path> --name <item-slug> --dry-run
 ```
 
-The CLI reads the root `registry.json` in this public repository. No custom domain is required.
+If you cloned this tool just to run the script, point `--out` at **your** templates repo so this example catalog is left alone.
 
-## Inspect and search
+## Publish (account A)
 
-```bash
-npx shadcn@latest view franklinjavier/oficina/orchestrator
-npx shadcn@latest search franklinjavier/oficina
-npx shadcn@latest list franklinjavier/oficina
-```
-
-Maintainers can also inspect a locally built item:
-
-```bash
-npx shadcn@latest view ./public/r/orchestrator.json
-```
-
-## Example item
-
-`orchestrator` is a sanitized, invented Grok Bot snapshot for a first-mate-shaped fleet coordinator named Helm.
-
-It includes profile name/title/description, an optional generic avatar, skill pointers (plus one generic `route-work` body), and disabled routine templates with secrets stripped.
-
-It does not include conversation history, private memory, credentials, tokens, or live agent databases.
-
-After `shadcn add`, the files are at `oficina/bots/orchestrator/` in the directory where the command ran. Apply that snapshot by hand in Grok Bot: edit the profile from `oficina/bots/orchestrator/profile.json`, enable matching skills, and create routines from the templates.
-
-## Build and validate
-
-This repository is a source registry (`registry.json` at the repo root). `shadcn build` writes flattened item JSON to `public/r` for CI and local inspection. GitHub install uses the source registry.
+Commit `registry.json` and `registry/<item-slug>/` to **your** public GitHub repository. GitHub install reads that source registry. Optional local check:
 
 ```bash
 npx shadcn@latest build
 npx shadcn@latest registry validate
 ```
 
-## What this registry will not ship
+Then push. You now have an install address: `<your-github-owner>/<your-repo>/<item-slug>`.
+
+## Install (account B)
+
+One official command, from the directory that should receive the files:
+
+```bash
+npx shadcn@latest add <owner>/<repo>/<item>
+```
+
+If they already host built item JSON, the same snapshot works as:
+
+```bash
+npx shadcn@latest add https://<host>/r/<item>.json
+```
+
+`~/` in `files[].target` is the project cwd, not `$HOME`. Files land at `oficina/bots/<agent>/` under that directory. Apply them in Grok Bot: edit the profile from `oficina/bots/<agent>/profile.json`, enable matching skills, and create routines from the templates.
+
+## Example item in this repo
+
+`orchestrator` is a sanitized, invented Grok Bot snapshot for a first-mate-shaped fleet coordinator named Helm. It is an example of the file shape, not a publish target for your factory.
+
+```bash
+npx shadcn@latest add franklinjavier/oficina/orchestrator
+```
+
+That writes `oficina/bots/orchestrator/*` under the directory where it runs.
+
+Pin a revision or preview:
+
+```bash
+npx shadcn@latest add franklinjavier/oficina/orchestrator#main
+npx shadcn@latest add franklinjavier/oficina/orchestrator --dry-run
+npx shadcn@latest view franklinjavier/oficina/orchestrator
+```
+
+## Build and validate (this example)
+
+This repository keeps a source `registry.json` for the example item. `shadcn build` writes flattened JSON to `public/r` for CI.
+
+```bash
+npx shadcn@latest build
+npx shadcn@latest registry validate
+```
+
+## What the exporter will not ship
 
 - Secrets, tokens, or sign-ins
 - Live agent databases or local computer state

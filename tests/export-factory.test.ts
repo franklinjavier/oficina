@@ -352,17 +352,24 @@ test("refuses --out when it is this tool repo", async () => {
     description: "Owns intake notes.",
   });
 
-  const result = await exportFactory({
-    from: source,
-    name: "quill",
-    out: repoRoot,
-    dryRun: true,
-  });
-
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.equal(result.error.kind, "usage");
-    assert.match(result.error.message, /export-factory\.ts/);
+  const outs = [
+    repoRoot,
+    path.join(repoRoot, "public"),
+    path.join(repoRoot, "registry"),
+    path.join(repoRoot, "scripts", "lib"),
+  ];
+  for (const out of outs) {
+    const result = await exportFactory({
+      from: source,
+      name: "quill",
+      out,
+      dryRun: true,
+    });
+    assert.equal(result.ok, false, out);
+    if (!result.ok) {
+      assert.equal(result.error.kind, "usage");
+      assert.match(result.error.message, /export-factory\.ts/);
+    }
   }
 
   await rm(source, { recursive: true, force: true });
@@ -379,8 +386,17 @@ test("drops or refuses camelCase and underscored secret keys", async () => {
   assert.equal(isSecretKey("STRIPE_SECRET_KEY"), true);
   assert.equal(isSecretKey("API_SECRET_KEY"), true);
   assert.equal(isSecretKey("my_secret_key"), true);
+  assert.equal(isSecretKey("passphrase"), true);
+  assert.equal(isSecretKey("db_passphrase"), true);
+  assert.equal(isSecretKey("ENCRYPTION_KEY"), true);
+  assert.equal(isSecretKey("OPENAI_KEY"), true);
+  assert.equal(isSecretKey("SIGNING_KEY"), true);
+  assert.equal(isSecretKey("MASTER_KEY"), true);
+  assert.equal(isSecretKey("key"), true);
   assert.equal(isSecretKey("author"), false);
   assert.equal(isSecretKey("locale"), false);
+  assert.equal(isSecretKey("turkey"), false);
+  assert.equal(isSecretKey("monkey"), false);
   assert.equal(
     looksLikeSecret("123:AAHabcdefghijklmnopqrstuvwxyz"),
     true,
@@ -404,6 +420,13 @@ test("drops or refuses camelCase and underscored secret keys", async () => {
     STRIPE_SECRET_KEY: "hunter2",
     API_SECRET_KEY: "hunter2",
     my_secret_key: "hunter2",
+    ENCRYPTION_KEY: "hunter2",
+    OPENAI_KEY: "hunter2",
+    SIGNING_KEY: "hunter2",
+    MASTER_KEY: "hunter2",
+    passphrase: "hunter2",
+    turkey: "keep-turkey",
+    monkey: "keep-monkey",
   });
 
   const dropped = await exportFactory({
@@ -427,8 +450,17 @@ test("drops or refuses camelCase and underscored secret keys", async () => {
   assert.equal(settings.STRIPE_SECRET_KEY, undefined);
   assert.equal(settings.API_SECRET_KEY, undefined);
   assert.equal(settings.my_secret_key, undefined);
+  assert.equal(settings.ENCRYPTION_KEY, undefined);
+  assert.equal(settings.OPENAI_KEY, undefined);
+  assert.equal(settings.SIGNING_KEY, undefined);
+  assert.equal(settings.MASTER_KEY, undefined);
+  assert.equal(settings.passphrase, undefined);
+  assert.equal(settings.turkey, "keep-turkey");
+  assert.equal(settings.monkey, "keep-monkey");
   const written = await readUtf8Tree(path.join(out, "registry", "camel-drop"));
   assert.doesNotMatch(written, /hunter2/);
+  assert.match(written, /keep-turkey/);
+  assert.match(written, /keep-monkey/);
 
   await writeText(
     path.join(source, "skills", "secrets.md"),
@@ -463,12 +495,28 @@ test("redacts Stripe keys and credential URIs when the key is not dropped", asyn
   const mysqlUri = "mysql://desk:hunter2@db.example.test:3306/newsroom";
   const mongoUri = "mongodb://desk:hunter2@db.example.test:27017/newsroom";
   const mongoSrv = "mongodb+srv://desk:hunter2@db.example.test/newsroom";
+  const redisUri = "redis://desk:hunter2@cache.example.test:6379/0";
+  const redissUri = "rediss://desk:hunter2@cache.example.test:6380/0";
+  const amqpUri = "amqp://desk:hunter2@queue.example.test:5672/newsroom";
+  const amqpsUri = "amqps://desk:hunter2@queue.example.test:5671/newsroom";
+  const proxyUri = "https://desk:hunter2@proxy.example.test:8443";
+  const httpProxyUri = "http://desk:hunter2@proxy.example.test:8080";
+  const schemelessUri = "desk:hunter2@db.example.test:5432/newsroom";
 
   assert.equal(looksLikeSecret(stripeLive), true);
   assert.equal(looksLikeSecret(postgresUri), true);
+  assert.equal(looksLikeSecret(redisUri), true);
+  assert.equal(looksLikeSecret(redissUri), true);
+  assert.equal(looksLikeSecret(amqpUri), true);
+  assert.equal(looksLikeSecret(amqpsUri), true);
+  assert.equal(looksLikeSecret(proxyUri), true);
+  assert.equal(looksLikeSecret(httpProxyUri), true);
+  assert.equal(looksLikeSecret(schemelessUri), true);
   assert.equal(isSecretKey("databaseUrl"), false);
   assert.equal(isSecretKey("DATABASE_URL"), false);
   assert.equal(isSecretKey("connectionString"), false);
+  assert.equal(isSecretKey("redisUrl"), false);
+  assert.equal(isSecretKey("proxyUrl"), false);
 
   const source = await mkdtemp(path.join(tmpdir(), "oficina-uris-"));
   const out = await makeOutDir();
@@ -502,6 +550,13 @@ test("redacts Stripe keys and credential URIs when the key is not dropped", asyn
     databaseUrl: postgresUri,
     DATABASE_URL: mysqlUri,
     connectionString: mongoUri,
+    redisUrl: redisUri,
+    cacheUrl: redissUri,
+    queueUrl: amqpUri,
+    brokerUrl: amqpsUri,
+    proxyUrl: proxyUri,
+    httpProxy: httpProxyUri,
+    backupUrl: schemelessUri,
     note: `${stripeTest} ${stripeRestricted} ${mongoSrv}`,
   });
 
@@ -526,6 +581,11 @@ test("redacts Stripe keys and credential URIs when the key is not dropped", asyn
   assert.doesNotMatch(written, /mysql:\/\//);
   assert.doesNotMatch(written, /mongodb:\/\//);
   assert.doesNotMatch(written, /mongodb\+srv:\/\//);
+  assert.doesNotMatch(written, /rediss?:\/\//);
+  assert.doesNotMatch(written, /amqps?:\/\//);
+  assert.doesNotMatch(written, /https:\/\/desk:/);
+  assert.doesNotMatch(written, /http:\/\/desk:/);
+  assert.doesNotMatch(written, /desk:hunter2@/);
   assert.doesNotMatch(written, /hunter2/);
 
   await rm(source, { recursive: true, force: true });
@@ -571,6 +631,140 @@ test("refuses dotted and multiline leftover assignments", async () => {
     assert.doesNotMatch(result.error.findings.join("\n"), /hunter2/);
   }
   await assert.rejects(readdir(path.join(out, "registry", "dotted-assign")));
+
+  await rm(source, { recursive: true, force: true });
+  await rm(out, { recursive: true, force: true });
+});
+
+test("refuses quoted, bracket, delimiter, and trailing-comma leftover assignments", async () => {
+  assert.equal(looksLikeSecret('"password": hunter2'), true);
+  assert.equal(looksLikeSecret("'apiKey': leftover"), true);
+  assert.equal(looksLikeSecret('process.env["API_KEY"]=hunter2'), true);
+  assert.equal(looksLikeSecret("obj['password'] = hunter2"), true);
+  assert.equal(looksLikeSecret("Server=tcp:db.example.test;Password=hunter2"), true);
+  assert.equal(looksLikeSecret("?api_key=hunter2"), true);
+  assert.equal(looksLikeSecret("&token=hunter2"), true);
+  assert.equal(looksLikeSecret("key=hunter2"), true);
+  assert.equal(looksLikeSecret("passphrase=hunter2"), true);
+  assert.equal(looksLikeSecret("turkey=ok"), false);
+  assert.equal(looksLikeSecret("monkey=ok"), false);
+
+  const source = await mkdtemp(path.join(tmpdir(), "oficina-assign-class-"));
+  const out = await makeOutDir();
+
+  await writeJson(path.join(source, "profile.json"), {
+    name: "Quill",
+    title: "Inbox Clerk",
+    description: "Owns intake notes.",
+  });
+  await writeText(
+    path.join(source, "skills", "quoted-notes.md"),
+    ['# Notes', "", '"password": hunter2', "'apiKey': leftover", ""].join("\n"),
+  );
+  await writeText(
+    path.join(source, "skills", "bracket-notes.md"),
+    [
+      "# Notes",
+      "",
+      'process.env["API_KEY"]=hunter2',
+      "obj['password'] = hunter2",
+      "",
+    ].join("\n"),
+  );
+  await writeText(
+    path.join(source, "skills", "delimited-notes.md"),
+    [
+      "# Notes",
+      "",
+      "Server=tcp:db.example.test;Password=hunter2",
+      "https://example.test/hook?api_key=hunter2",
+      "https://example.test/hook&token=hunter2",
+      "key=hunter2",
+      "passphrase=hunter2",
+      "",
+    ].join("\n"),
+  );
+  await writeText(
+    path.join(source, "settings.json"),
+    ['{', '  "theme": "dark",', '  "password": "hunter2",', "}", ""].join("\n"),
+  );
+
+  const result = await exportFactory({
+    from: source,
+    name: "assign-class",
+    out,
+    dryRun: false,
+  });
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.equal(result.error.kind, "credentials");
+  if (result.error.kind === "credentials") {
+    const findings = result.error.findings.join("\n");
+    assert.ok(findings.includes("quoted-notes.md"));
+    assert.ok(findings.includes("bracket-notes.md"));
+    assert.ok(findings.includes("delimited-notes.md"));
+    assert.ok(findings.includes("settings.json"));
+    assert.doesNotMatch(findings, /hunter2/);
+    assert.doesNotMatch(result.error.message, /hunter2/);
+  }
+  await assert.rejects(readdir(path.join(out, "registry", "assign-class")));
+
+  await rm(source, { recursive: true, force: true });
+  await rm(out, { recursive: true, force: true });
+});
+
+test("redacts GitHub, Slack app, and npm tokens under innocent keys", async () => {
+  const githubTokens = (["o", "u", "s", "r"] as const).map((kind) =>
+    ["gh", kind, "_", "abcdefghijklmnopqrstuv"].join(""),
+  );
+  const slackApp = ["xapp", "1", "A0123456789", "1234567890123", "abcdefabcdef"].join(
+    "-",
+  );
+  const npmToken = ["npm", "abcdefghijklmnopqrstuvwx"].join("_");
+
+  for (const token of githubTokens) {
+    assert.equal(looksLikeSecret(token), true, token.slice(0, 4));
+  }
+  assert.equal(looksLikeSecret(slackApp), true);
+  assert.equal(looksLikeSecret(npmToken), true);
+
+  const source = await mkdtemp(path.join(tmpdir(), "oficina-extra-tokens-"));
+  const out = await makeOutDir();
+
+  await writeJson(path.join(source, "profile.json"), {
+    name: "Quill",
+    title: "Inbox Clerk",
+    description: "Owns intake notes.",
+  });
+  await writeJson(path.join(source, "settings.json"), {
+    theme: "dark",
+    note: githubTokens.join(" "),
+    comment: slackApp,
+    hint: npmToken,
+  });
+
+  const result = await exportFactory({
+    from: source,
+    name: "extra-tokens",
+    out,
+    dryRun: false,
+  });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+
+  const settings = JSON.parse(
+    await readFile(path.join(out, "registry", "extra-tokens", "settings.json"), "utf8"),
+  ) as Record<string, unknown>;
+  assert.equal(settings.theme, "dark");
+  const written = await readUtf8Tree(path.join(out, "registry", "extra-tokens"));
+  for (const token of githubTokens) {
+    assert.doesNotMatch(written, new RegExp(token));
+  }
+  assert.doesNotMatch(written, new RegExp(slackApp));
+  assert.doesNotMatch(written, new RegExp(npmToken));
+  assert.match(String(settings.note), /\[redacted\]/);
+  assert.match(String(settings.comment), /\[redacted\]/);
+  assert.match(String(settings.hint), /\[redacted\]/);
 
   await rm(source, { recursive: true, force: true });
   await rm(out, { recursive: true, force: true });

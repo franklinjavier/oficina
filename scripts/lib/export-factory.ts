@@ -694,11 +694,16 @@ function stringField(
 }
 
 async function containsExporter(out: string): Promise<boolean> {
-  try {
-    await access(path.join(out, EXPORTER_RELATIVE_PATH));
-    return true;
-  } catch {
-    return false;
+  let current = path.resolve(out);
+  while (true) {
+    try {
+      await access(path.join(current, EXPORTER_RELATIVE_PATH));
+      return true;
+    } catch {
+      const parent = path.dirname(current);
+      if (parent === current) return false;
+      current = parent;
+    }
   }
 }
 

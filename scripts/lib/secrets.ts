@@ -14,7 +14,9 @@ const SECRET_KEYS = new Set([
   "credentials",
   "email",
   "emailaddress",
+  "key",
   "passwd",
+  "passphrase",
   "password",
   "privatekey",
   "refreshtoken",
@@ -26,13 +28,16 @@ const SECRET_KEYS = new Set([
 ]);
 
 const EXACT_ONLY_KEYS = new Set(["auth"]);
+const NO_SUFFIX_KEYS = new Set(["auth", "key"]);
 
 const TOKEN_PATTERNS: readonly RegExp[] = [
   /sk-[A-Za-z0-9_-]{16,}/g,
   /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]+/g,
   /xox[baprs]-[A-Za-z0-9-]{10,}/g,
-  /ghp_[A-Za-z0-9]{20,}/g,
+  /xapp-[A-Za-z0-9-]{10,}/g,
+  /gh[pousr]_[A-Za-z0-9]{20,}/g,
   /github_pat_[A-Za-z0-9_]{20,}/g,
+  /npm_[A-Za-z0-9]{20,}/g,
   /glpat-[A-Za-z0-9_-]{20,}/g,
   /xai-[A-Za-z0-9_-]{16,}/g,
   /AIza[A-Za-z0-9_-]{30,}/g,
@@ -43,13 +48,14 @@ const TOKEN_PATTERNS: readonly RegExp[] = [
   /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]+?-----END [A-Z ]*PRIVATE KEY-----/g,
   /https?:\/\/hooks\.[^\s"'\\]+/gi,
   /https?:\/\/(?:discord|discordapp)\.com\/api\/webhooks\/[^\s"'\\]+/gi,
-  /(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?):\/\/[^\s"'\\]+/gi,
+  /(?:(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|rediss?|amqps?|https?):\/\/)?[^\s"'\\/@:]*:[^\s"'\\/@]+@[^\s"'\\]+/gi,
 ];
 
 const EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const SLACK_CHANNEL_PATTERN = /\b[CDG](?=[A-Z0-9]*[0-9])[A-Z0-9]{8,}\b/g;
+
 const ASSIGNMENT_LINE =
-  /(?:^|[\s"'`.])([A-Za-z_][A-Za-z0-9_-]*)\s*[:=][ \t]*(?:\S+|\n[ \t]+\S+)/gm;
+  /(?:\[\s*["']([A-Za-z_][A-Za-z0-9_-]*)["']\s*\]|(?:^|[\s"'`.;?&{,(\[])["']([A-Za-z_][A-Za-z0-9_-]*)["']|(?:^|[\s"'`.;?&{,(\[])([A-Za-z_][A-Za-z0-9_-]*))\s*[:=][ \t]*(?:[^\s;?&,]+|\n[ \t]+\S+)?/gm;
 
 export function normalizeKey(key: string): string {
   return key.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -66,7 +72,7 @@ export function isSecretKey(key: string): boolean {
   }
 
   for (const secret of SECRET_KEYS) {
-    if (EXACT_ONLY_KEYS.has(secret)) continue;
+    if (NO_SUFFIX_KEYS.has(secret)) continue;
     if (normalized.length > secret.length && normalized.endsWith(secret)) {
       return true;
     }
@@ -127,7 +133,7 @@ function hasSecretAssignment(text: string): boolean {
   ASSIGNMENT_LINE.lastIndex = 0;
   let match = ASSIGNMENT_LINE.exec(text);
   while (match != null) {
-    const key = match[1];
+    const key = match[1] ?? match[2] ?? match[3];
     if (key != null && isSecretKey(key)) {
       ASSIGNMENT_LINE.lastIndex = 0;
       return true;

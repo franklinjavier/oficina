@@ -29,6 +29,7 @@ const EXACT_ONLY_KEYS = new Set(["auth"]);
 
 const TOKEN_PATTERNS: readonly RegExp[] = [
   /sk-[A-Za-z0-9_-]{16,}/g,
+  /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]+/g,
   /xox[baprs]-[A-Za-z0-9-]{10,}/g,
   /ghp_[A-Za-z0-9]{20,}/g,
   /github_pat_[A-Za-z0-9_]{20,}/g,
@@ -42,12 +43,13 @@ const TOKEN_PATTERNS: readonly RegExp[] = [
   /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]+?-----END [A-Z ]*PRIVATE KEY-----/g,
   /https?:\/\/hooks\.[^\s"'\\]+/gi,
   /https?:\/\/(?:discord|discordapp)\.com\/api\/webhooks\/[^\s"'\\]+/gi,
+  /(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?):\/\/[^\s"'\\]+/gi,
 ];
 
 const EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const SLACK_CHANNEL_PATTERN = /\b[CDG](?=[A-Z0-9]*[0-9])[A-Z0-9]{8,}\b/g;
 const ASSIGNMENT_LINE =
-  /(?:^|[\s"'`])([A-Za-z_][A-Za-z0-9_-]*)\s*[:=]\s*\S+/gm;
+  /(?:^|[\s"'`.])([A-Za-z_][A-Za-z0-9_-]*)\s*[:=][ \t]*(?:\S+|\n[ \t]+\S+)/gm;
 
 export function normalizeKey(key: string): string {
   return key.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -58,10 +60,9 @@ export function isSecretKey(key: string): boolean {
   if (SECRET_KEYS.has(normalized)) return true;
 
   const parts = splitKeyParts(key);
-  for (let take = 1; take <= Math.min(3, parts.length); take += 1) {
-    if (parts.length === 1 && take === 1) continue;
-    const suffix = normalizeKey(parts.slice(-take).join(""));
-    if (SECRET_KEYS.has(suffix) && !EXACT_ONLY_KEYS.has(suffix)) return true;
+  for (const part of parts) {
+    const stem = normalizeKey(part);
+    if (SECRET_KEYS.has(stem) && !EXACT_ONLY_KEYS.has(stem)) return true;
   }
 
   for (const secret of SECRET_KEYS) {

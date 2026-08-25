@@ -373,6 +373,12 @@ test("drops or refuses camelCase and underscored secret keys", async () => {
   assert.equal(isSecretKey("db_password"), true);
   assert.equal(isSecretKey("TELEGRAM_BOT_TOKEN"), true);
   assert.equal(isSecretKey("AWS_SECRET_ACCESS_KEY"), true);
+  assert.equal(isSecretKey("secretKey"), true);
+  assert.equal(isSecretKey("SECRET_KEY"), true);
+  assert.equal(isSecretKey("SECRET_KEY_BASE"), true);
+  assert.equal(isSecretKey("STRIPE_SECRET_KEY"), true);
+  assert.equal(isSecretKey("API_SECRET_KEY"), true);
+  assert.equal(isSecretKey("my_secret_key"), true);
   assert.equal(isSecretKey("author"), false);
   assert.equal(isSecretKey("locale"), false);
   assert.equal(
@@ -392,6 +398,12 @@ test("drops or refuses camelCase and underscored secret keys", async () => {
     theme: "dark",
     botToken: "hunter2",
     db_password: "hunter2",
+    secretKey: "hunter2",
+    SECRET_KEY: "hunter2",
+    SECRET_KEY_BASE: "hunter2",
+    STRIPE_SECRET_KEY: "hunter2",
+    API_SECRET_KEY: "hunter2",
+    my_secret_key: "hunter2",
   });
 
   const dropped = await exportFactory({
@@ -409,6 +421,12 @@ test("drops or refuses camelCase and underscored secret keys", async () => {
   assert.equal(settings.theme, "dark");
   assert.equal(settings.botToken, undefined);
   assert.equal(settings.db_password, undefined);
+  assert.equal(settings.secretKey, undefined);
+  assert.equal(settings.SECRET_KEY, undefined);
+  assert.equal(settings.SECRET_KEY_BASE, undefined);
+  assert.equal(settings.STRIPE_SECRET_KEY, undefined);
+  assert.equal(settings.API_SECRET_KEY, undefined);
+  assert.equal(settings.my_secret_key, undefined);
   const written = await readUtf8Tree(path.join(out, "registry", "camel-drop"));
   assert.doesNotMatch(written, /hunter2/);
 
@@ -428,6 +446,131 @@ test("drops or refuses camelCase and underscored secret keys", async () => {
     assert.equal(refused.error.kind, "credentials");
   }
   await assert.rejects(readdir(path.join(out, "registry", "camel-refuse")));
+
+  await rm(source, { recursive: true, force: true });
+  await rm(out, { recursive: true, force: true });
+});
+
+function stripeLikeKey(prefix: "sk" | "rk", mode: "live" | "test"): string {
+  return [prefix, mode, "abcdefghijklmnopqrstuvwx"].join("_");
+}
+
+test("redacts Stripe keys and credential URIs when the key is not dropped", async () => {
+  const stripeLive = stripeLikeKey("sk", "live");
+  const stripeTest = stripeLikeKey("sk", "test");
+  const stripeRestricted = stripeLikeKey("rk", "live");
+  const postgresUri = "postgres://desk:hunter2@db.example.test:5432/newsroom";
+  const mysqlUri = "mysql://desk:hunter2@db.example.test:3306/newsroom";
+  const mongoUri = "mongodb://desk:hunter2@db.example.test:27017/newsroom";
+  const mongoSrv = "mongodb+srv://desk:hunter2@db.example.test/newsroom";
+
+  assert.equal(looksLikeSecret(stripeLive), true);
+  assert.equal(looksLikeSecret(postgresUri), true);
+  assert.equal(isSecretKey("databaseUrl"), false);
+  assert.equal(isSecretKey("DATABASE_URL"), false);
+  assert.equal(isSecretKey("connectionString"), false);
+
+  const source = await mkdtemp(path.join(tmpdir(), "oficina-uris-"));
+  const out = await makeOutDir();
+
+  await writeJson(path.join(source, "profile.json"), {
+    name: "Quill",
+    title: "Inbox Clerk",
+    description: `Owns intake notes. Never embed ${stripeLive} or ${postgresUri}.`,
+  });
+
+  const leakyProfile = await exportFactory({
+    from: source,
+    name: "uri-profile",
+    out,
+    dryRun: false,
+  });
+  assert.equal(leakyProfile.ok, false);
+  if (!leakyProfile.ok) {
+    assert.equal(leakyProfile.error.kind, "credentials");
+    assert.doesNotMatch(leakyProfile.error.message, new RegExp(stripeLive));
+    assert.doesNotMatch(leakyProfile.error.message, /postgres:\/\//);
+  }
+
+  await writeJson(path.join(source, "profile.json"), {
+    name: "Quill",
+    title: "Inbox Clerk",
+    description: "Owns intake notes.",
+  });
+  await writeJson(path.join(source, "settings.json"), {
+    theme: "dark",
+    databaseUrl: postgresUri,
+    DATABASE_URL: mysqlUri,
+    connectionString: mongoUri,
+    note: `${stripeTest} ${stripeRestricted} ${mongoSrv}`,
+  });
+
+  const result = await exportFactory({
+    from: source,
+    name: "uri-settings",
+    out,
+    dryRun: false,
+  });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+
+  const settings = JSON.parse(
+    await readFile(path.join(out, "registry", "uri-settings", "settings.json"), "utf8"),
+  ) as Record<string, unknown>;
+  assert.equal(settings.theme, "dark");
+  const written = await readUtf8Tree(path.join(out, "registry", "uri-settings"));
+  assert.doesNotMatch(written, new RegExp(stripeLive));
+  assert.doesNotMatch(written, new RegExp(stripeTest));
+  assert.doesNotMatch(written, new RegExp(stripeRestricted));
+  assert.doesNotMatch(written, /postgres:\/\//);
+  assert.doesNotMatch(written, /mysql:\/\//);
+  assert.doesNotMatch(written, /mongodb:\/\//);
+  assert.doesNotMatch(written, /mongodb\+srv:\/\//);
+  assert.doesNotMatch(written, /hunter2/);
+
+  await rm(source, { recursive: true, force: true });
+  await rm(out, { recursive: true, force: true });
+});
+
+test("refuses dotted and multiline leftover assignments", async () => {
+  const source = await mkdtemp(path.join(tmpdir(), "oficina-dotted-"));
+  const out = await makeOutDir();
+
+  await writeJson(path.join(source, "profile.json"), {
+    name: "Quill",
+    title: "Inbox Clerk",
+    description: "Owns intake notes.",
+  });
+  await writeText(
+    path.join(source, "skills", "env-notes.md"),
+    [
+      "# Env notes",
+      "",
+      "process.env.API_KEY=hunter2",
+      "obj.password = hunter2",
+      "",
+    ].join("\n"),
+  );
+  await writeText(
+    path.join(source, "settings.yaml"),
+    ["locale: en", "password:", "  hunter2", ""].join("\n"),
+  );
+
+  const result = await exportFactory({
+    from: source,
+    name: "dotted-assign",
+    out,
+    dryRun: false,
+  });
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.equal(result.error.kind, "credentials");
+  if (result.error.kind === "credentials") {
+    assert.ok(result.error.findings.some((finding) => finding.includes("env-notes.md")));
+    assert.ok(result.error.findings.some((finding) => finding.includes("settings.yaml")));
+    assert.doesNotMatch(result.error.findings.join("\n"), /hunter2/);
+  }
+  await assert.rejects(readdir(path.join(out, "registry", "dotted-assign")));
 
   await rm(source, { recursive: true, force: true });
   await rm(out, { recursive: true, force: true });

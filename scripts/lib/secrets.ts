@@ -59,7 +59,7 @@ const TOKEN_PATTERNS: readonly RegExp[] = [
 const EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const SLACK_CHANNEL_PATTERN = /\b[CDG](?=[A-Z0-9]*[0-9])[A-Z0-9]{8,}\b/g;
 const SCHEMELESS_USERINFO =
-  /(^|[\s"'`=])([^\s"'\\/@:]*):([^\s"'\\/@]+)@([^\s"'\\]+)/g;
+  /(^|[\s"'`=/])([^\s"'\\/@:]*):([^\s"'\\/@]+)@([^\s"'\\]+)/g;
 const CLOCK_PASSWORD_LENGTH = 2;
 
 const ASSIGNMENT_LINE =

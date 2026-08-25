@@ -502,6 +502,7 @@ test("redacts Stripe keys and credential URIs when the key is not dropped", asyn
   const proxyUri = "https://desk:hunter2@proxy.example.test:8443";
   const httpProxyUri = "http://desk:hunter2@proxy.example.test:8080";
   const schemelessUri = "desk:hunter2@db.example.test:5432/newsroom";
+  const sshUri = "ssh://desk:hunter2@git.example.test";
 
   assert.equal(looksLikeSecret(stripeLive), true);
   assert.equal(looksLikeSecret(postgresUri), true);
@@ -512,6 +513,7 @@ test("redacts Stripe keys and credential URIs when the key is not dropped", asyn
   assert.equal(looksLikeSecret(proxyUri), true);
   assert.equal(looksLikeSecret(httpProxyUri), true);
   assert.equal(looksLikeSecret(schemelessUri), true);
+  assert.equal(looksLikeSecret(sshUri), true);
   assert.equal(looksLikeSecret("desk:hunter2@localhost"), true);
   assert.equal(isSecretKey("databaseUrl"), false);
   assert.equal(isSecretKey("DATABASE_URL"), false);
@@ -558,6 +560,7 @@ test("redacts Stripe keys and credential URIs when the key is not dropped", asyn
     proxyUrl: proxyUri,
     httpProxy: httpProxyUri,
     backupUrl: schemelessUri,
+    gitUrl: sshUri,
     note: `${stripeTest} ${stripeRestricted} ${mongoSrv}`,
   });
 
@@ -586,6 +589,7 @@ test("redacts Stripe keys and credential URIs when the key is not dropped", asyn
   assert.doesNotMatch(written, /amqps?:\/\//);
   assert.doesNotMatch(written, /https:\/\/desk:/);
   assert.doesNotMatch(written, /http:\/\/desk:/);
+  assert.doesNotMatch(written, /ssh:\/\/desk:/);
   assert.doesNotMatch(written, /desk:hunter2@/);
   assert.doesNotMatch(written, /hunter2/);
 

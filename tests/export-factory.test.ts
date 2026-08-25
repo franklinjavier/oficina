@@ -770,6 +770,136 @@ test("redacts GitHub, Slack app, and npm tokens under innocent keys", async () =
   await rm(out, { recursive: true, force: true });
 });
 
+test("drops plural secret maps and refuses leftover plural assignments", async () => {
+  assert.equal(isSecretKey("secrets"), true);
+  assert.equal(isSecretKey("tokens"), true);
+  assert.equal(isSecretKey("passwords"), true);
+  assert.equal(isSecretKey("apiKeys"), true);
+  assert.equal(isSecretKey("api_keys"), true);
+  assert.equal(isSecretKey("privateKeys"), true);
+  assert.equal(looksLikeSecret("secrets: hunter2"), true);
+  assert.equal(looksLikeSecret("tokens: hunter2"), true);
+  assert.equal(looksLikeSecret("passwords: hunter2"), true);
+  assert.equal(looksLikeSecret("api_keys: hunter2"), true);
+
+  const source = await mkdtemp(path.join(tmpdir(), "oficina-plurals-"));
+  const out = await makeOutDir();
+
+  await writeJson(path.join(source, "profile.json"), {
+    name: "Quill",
+    title: "Inbox Clerk",
+    description: "Owns intake notes.",
+  });
+  await writeJson(path.join(source, "settings.json"), {
+    theme: "dark",
+    secrets: { openai: "opaque-desk-value" },
+    tokens: { slack: "opaque-desk-value" },
+    passwords: { db: "opaque-desk-value" },
+    apiKeys: { openai: "opaque-desk-value" },
+    api_keys: { extra: "opaque-desk-value" },
+    privateKeys: { ssh: "opaque-desk-value" },
+  });
+
+  const dropped = await exportFactory({
+    from: source,
+    name: "plural-drop",
+    out,
+    dryRun: false,
+  });
+  assert.equal(dropped.ok, true);
+  if (!dropped.ok) return;
+  const settings = JSON.parse(
+    await readFile(path.join(out, "registry", "plural-drop", "settings.json"), "utf8"),
+  ) as Record<string, unknown>;
+  assert.equal(settings.theme, "dark");
+  assert.equal(settings.secrets, undefined);
+  assert.equal(settings.tokens, undefined);
+  assert.equal(settings.passwords, undefined);
+  assert.equal(settings.apiKeys, undefined);
+  assert.equal(settings.api_keys, undefined);
+  assert.equal(settings.privateKeys, undefined);
+  const written = await readUtf8Tree(path.join(out, "registry", "plural-drop"));
+  assert.doesNotMatch(written, /opaque-desk-value/);
+
+  await writeText(
+    path.join(source, "settings.yaml"),
+    ["locale: en", "secrets: hunter2", ""].join("\n"),
+  );
+  const refused = await exportFactory({
+    from: source,
+    name: "plural-refuse",
+    out,
+    dryRun: false,
+  });
+  assert.equal(refused.ok, false);
+  if (!refused.ok) {
+    assert.equal(refused.error.kind, "credentials");
+    if (refused.error.kind === "credentials") {
+      assert.ok(refused.error.findings.some((finding) => finding.includes("settings.yaml")));
+      assert.doesNotMatch(refused.error.findings.join("\n"), /hunter2/);
+    }
+  }
+  await assert.rejects(readdir(path.join(out, "registry", "plural-refuse")));
+
+  await rm(source, { recursive: true, force: true });
+  await rm(out, { recursive: true, force: true });
+});
+
+test("refuses leftover CLI flag secrets without a known token prefix", async () => {
+  assert.equal(looksLikeSecret("--password=hunter2"), true);
+  assert.equal(looksLikeSecret("--token=opaque-desk-value"), true);
+  assert.equal(looksLikeSecret("--api-key=opaque-desk-value"), true);
+  assert.equal(looksLikeSecret("--password hunter2"), true);
+  assert.equal(looksLikeSecret('["--token","opaque-desk-value"]'), true);
+  assert.equal(looksLikeSecret("--theme dark"), false);
+  assert.equal(looksLikeSecret("--name quill"), false);
+
+  const source = await mkdtemp(path.join(tmpdir(), "oficina-cli-flags-"));
+  const out = await makeOutDir();
+
+  await writeJson(path.join(source, "profile.json"), {
+    name: "Quill",
+    title: "Inbox Clerk",
+    description: "Owns intake notes.",
+  });
+  await writeText(
+    path.join(source, "skills", "cli-notes.md"),
+    [
+      "# Notes",
+      "",
+      "--password=hunter2",
+      "--token=opaque-desk-value",
+      "--api-key=opaque-desk-value",
+      "--password hunter2",
+      "",
+    ].join("\n"),
+  );
+  await writeJson(path.join(source, "mcp.json"), {
+    argv: ["--token", "opaque-desk-value"],
+  });
+
+  const result = await exportFactory({
+    from: source,
+    name: "cli-flags",
+    out,
+    dryRun: false,
+  });
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.equal(result.error.kind, "credentials");
+  if (result.error.kind === "credentials") {
+    const findings = result.error.findings.join("\n");
+    assert.ok(findings.includes("cli-notes.md"));
+    assert.ok(findings.includes("mcp.json"));
+    assert.doesNotMatch(findings, /hunter2/);
+    assert.doesNotMatch(findings, /opaque-desk-value/);
+  }
+  await assert.rejects(readdir(path.join(out, "registry", "cli-flags")));
+
+  await rm(source, { recursive: true, force: true });
+  await rm(out, { recursive: true, force: true });
+});
+
 test("refuses leftover assignment-style secrets in markdown and yaml", async () => {
   const source = await mkdtemp(path.join(tmpdir(), "oficina-assign-"));
   const out = await makeOutDir();

@@ -3,6 +3,7 @@ const SECRET_KEYS = new Set([
   "accesskey",
   "accesskeyid",
   "apikey",
+  "apikeys",
   "apisecret",
   "authorization",
   "auth",
@@ -18,10 +19,14 @@ const SECRET_KEYS = new Set([
   "passwd",
   "passphrase",
   "password",
+  "passwords",
   "privatekey",
+  "privatekeys",
   "refreshtoken",
   "secret",
+  "secrets",
   "token",
+  "tokens",
   "webhook",
   "webhookkey",
   "webhookurl",
@@ -55,7 +60,7 @@ const EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const SLACK_CHANNEL_PATTERN = /\b[CDG](?=[A-Z0-9]*[0-9])[A-Z0-9]{8,}\b/g;
 
 const ASSIGNMENT_LINE =
-  /(?:\[\s*["']([A-Za-z_][A-Za-z0-9_-]*)["']\s*\]|(?:^|[\s"'`.;?&{,(\[])["']([A-Za-z_][A-Za-z0-9_-]*)["']|(?:^|[\s"'`.;?&{,(\[])([A-Za-z_][A-Za-z0-9_-]*))\s*[:=][ \t]*(?:[^\s;?&,]+|\n[ \t]+\S+)?/gm;
+  /(?:\[\s*["']([A-Za-z_][A-Za-z0-9_-]*)["']\s*\]|(?:^|[\s"'`.;?&{,(\[])["']([A-Za-z_][A-Za-z0-9_-]*)["']|(?:^|[\s"'`.;?&{,(\[])([A-Za-z_][A-Za-z0-9_-]*))\s*[:=][ \t]*(?:[^\s;?&,]+|\n[ \t]+\S+)?|(?:^|[\s"'`.;?&{,(\[])--([A-Za-z][A-Za-z0-9_-]*)(?:\s*[:=][ \t]*|[ \t]+(?!--)|["']\s*,\s*["'])(?:[^\s;?&,]+|\n[ \t]+\S+)/gm;
 
 export function normalizeKey(key: string): string {
   return key.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -133,7 +138,7 @@ function hasSecretAssignment(text: string): boolean {
   ASSIGNMENT_LINE.lastIndex = 0;
   let match = ASSIGNMENT_LINE.exec(text);
   while (match != null) {
-    const key = match[1] ?? match[2] ?? match[3];
+    const key = match[1] ?? match[2] ?? match[3] ?? match[4];
     if (key != null && isSecretKey(key)) {
       ASSIGNMENT_LINE.lastIndex = 0;
       return true;

@@ -198,7 +198,8 @@ export async function exportFactory(args: CliArgs): Promise<Result<ExportReport>
   }
   const catalogPath = path.join(out, "registry.json");
   const existingCatalog = await readCatalog(catalogPath, name);
-  if (RESERVED_NAMES.has(name) && catalogHasItem(existingCatalog, name)) {
+  if (!existingCatalog.ok) return existingCatalog;
+  if (RESERVED_NAMES.has(name) && catalogHasItem(existingCatalog.data, name)) {
     return {
       ok: false,
       error: {
@@ -283,7 +284,7 @@ export async function exportFactory(args: CliArgs): Promise<Result<ExportReport>
       name,
       planned: filesToWrite,
       item,
-      catalog: existingCatalog,
+      catalog: existingCatalog.data,
     });
   } catch (error) {
     return {
@@ -615,19 +616,43 @@ async function writeExport(input: {
 async function readCatalog(
   catalogPath: string,
   fallbackName: string,
-): Promise<Record<string, unknown>> {
+): Promise<Result<Record<string, unknown>>> {
   try {
     const parsed: unknown = JSON.parse(await readFile(catalogPath, "utf8"));
-    if (isRecord(parsed)) return parsed;
-  } catch {
-    // Create a minimal catalog when the destination is a fresh repo.
+    if (isRecord(parsed)) return { ok: true, data: parsed };
+    return {
+      ok: false,
+      error: {
+        kind: "io",
+        message:
+          "Refusing --out: registry.json exists but is not a JSON object. Fix or remove it before exporting.",
+      },
+    };
+  } catch (error) {
+    if (isEnoent(error)) {
+      return {
+        ok: true,
+        data: {
+          $schema: "https://ui.shadcn.com/schema/registry.json",
+          name: fallbackName,
+          homepage: "https://github.com/owner/repo",
+          items: [],
+        },
+      };
+    }
+    return {
+      ok: false,
+      error: {
+        kind: "io",
+        message:
+          "Refusing --out: registry.json exists but is not a JSON object. Fix or remove it before exporting.",
+      },
+    };
   }
-  return {
-    $schema: "https://ui.shadcn.com/schema/registry.json",
-    name: fallbackName,
-    homepage: "https://github.com/owner/repo",
-    items: [],
-  };
+}
+
+function isEnoent(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
 function catalogHasItem(catalog: Record<string, unknown>, name: string): boolean {

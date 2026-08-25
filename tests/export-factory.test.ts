@@ -512,6 +512,7 @@ test("redacts Stripe keys and credential URIs when the key is not dropped", asyn
   assert.equal(looksLikeSecret(proxyUri), true);
   assert.equal(looksLikeSecret(httpProxyUri), true);
   assert.equal(looksLikeSecret(schemelessUri), true);
+  assert.equal(looksLikeSecret("desk:hunter2@localhost"), true);
   assert.equal(isSecretKey("databaseUrl"), false);
   assert.equal(isSecretKey("DATABASE_URL"), false);
   assert.equal(isSecretKey("connectionString"), false);
@@ -587,6 +588,54 @@ test("redacts Stripe keys and credential URIs when the key is not dropped", asyn
   assert.doesNotMatch(written, /http:\/\/desk:/);
   assert.doesNotMatch(written, /desk:hunter2@/);
   assert.doesNotMatch(written, /hunter2/);
+
+  await rm(source, { recursive: true, force: true });
+  await rm(out, { recursive: true, force: true });
+});
+
+test("does not treat clock times or 1:1 mentions as credential URIs", async () => {
+  assert.equal(looksLikeSecret("Meet at 9:30@office"), false);
+  assert.equal(looksLikeSecret("Meet at 9:30@office."), false);
+  assert.equal(looksLikeSecret("1:1@alice"), false);
+  assert.equal(looksLikeSecret("12:00@standup"), false);
+  assert.equal(looksLikeSecret("desk:hunter2@localhost"), true);
+  assert.equal(looksLikeSecret("desk:hunter2@db.example.test"), true);
+
+  const source = await mkdtemp(path.join(tmpdir(), "oficina-clock-"));
+  const out = await makeOutDir();
+
+  await writeJson(path.join(source, "profile.json"), {
+    name: "Quill",
+    title: "Inbox Clerk",
+    description: "Standup at 9:30@office and a 1:1@alice before lunch.",
+  });
+  await writeText(
+    path.join(source, "skills", "desk.md"),
+    "# Desk\n\nMeet at 9:30@office. Keep the 1:1@alice notes local.\n",
+  );
+
+  const result = await exportFactory({
+    from: source,
+    name: "clock-bio",
+    out,
+    dryRun: false,
+  });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+
+  const profile = JSON.parse(
+    await readFile(path.join(out, "registry", "clock-bio", "profile.json"), "utf8"),
+  ) as { description: string };
+  assert.match(profile.description, /9:30@office/);
+  assert.match(profile.description, /1:1@alice/);
+
+  const skill = await readFile(
+    path.join(out, "registry", "clock-bio", "skills", "desk.md"),
+    "utf8",
+  );
+  assert.match(skill, /9:30@office/);
+  assert.match(skill, /1:1@alice/);
+  assert.doesNotMatch(skill, /\[redacted\]/);
 
   await rm(source, { recursive: true, force: true });
   await rm(out, { recursive: true, force: true });
@@ -1078,6 +1127,46 @@ test("refuses to overwrite the fictional orchestrator item", async () => {
 
   await rm(source, { recursive: true, force: true });
   await rm(out, { recursive: true, force: true });
+});
+
+test("refuses --out when registry.json exists but is not a JSON object", async () => {
+  const source = await mkdtemp(path.join(tmpdir(), "oficina-bad-catalog-"));
+  await writeJson(path.join(source, "profile.json"), {
+    name: "Quill",
+    title: "Inbox Clerk",
+    description: "Owns intake notes.",
+  });
+
+  const cases = [
+    { name: "array", body: "[]\n" },
+    { name: "string", body: '"catalog"\n' },
+    { name: "invalid", body: "{not json\n" },
+    { name: "null", body: "null\n" },
+  ] as const;
+
+  for (const item of cases) {
+    const out = await mkdtemp(path.join(tmpdir(), "oficina-bad-catalog-out-"));
+    const catalogPath = path.join(out, "registry.json");
+    await writeFile(catalogPath, item.body);
+
+    const result = await exportFactory({
+      from: source,
+      name: "quill",
+      out,
+      dryRun: false,
+    });
+    assert.equal(result.ok, false, item.name);
+    if (!result.ok) {
+      assert.equal(result.error.kind, "io", item.name);
+      assert.match(result.error.message, /registry\.json/);
+    }
+    assert.equal(await readFile(catalogPath, "utf8"), item.body);
+    await assert.rejects(readdir(path.join(out, "registry", "quill")));
+
+    await rm(out, { recursive: true, force: true });
+  }
+
+  await rm(source, { recursive: true, force: true });
 });
 
 test("writes a standalone catalog that is not this tool repo", async () => {

@@ -53,11 +53,14 @@ const TOKEN_PATTERNS: readonly RegExp[] = [
   /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]+?-----END [A-Z ]*PRIVATE KEY-----/g,
   /https?:\/\/hooks\.[^\s"'\\]+/gi,
   /https?:\/\/(?:discord|discordapp)\.com\/api\/webhooks\/[^\s"'\\]+/gi,
-  /(?:(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|rediss?|amqps?|https?):\/\/)?[^\s"'\\/@:]*:[^\s"'\\/@]+@[^\s"'\\]+/gi,
+  /(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|rediss?|amqps?|https?):\/\/[^\s"'\\/@:]*:[^\s"'\\/@]+@[^\s"'\\]+/gi,
 ];
 
 const EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const SLACK_CHANNEL_PATTERN = /\b[CDG](?=[A-Z0-9]*[0-9])[A-Z0-9]{8,}\b/g;
+const SCHEMELESS_USERINFO =
+  /(^|[\s"'`=])([^\s"'\\/@:]*):([^\s"'\\/@]+)@([^\s"'\\]+)/g;
+const CLOCK_PASSWORD_LENGTH = 2;
 
 const ASSIGNMENT_LINE =
   /(?:\[\s*["']([A-Za-z_][A-Za-z0-9_-]*)["']\s*\]|(?:^|[\s"'`.;?&{,(\[])["']([A-Za-z_][A-Za-z0-9_-]*)["']|(?:^|[\s"'`.;?&{,(\[])([A-Za-z_][A-Za-z0-9_-]*))\s*[:=][ \t]*(?:[^\s;?&,]+|\n[ \t]+\S+)?|(?:^|[\s"'`.;?&{,(\[])--([A-Za-z][A-Za-z0-9_-]*)(?:\s*[:=][ \t]*|[ \t]+(?!--)|["']\s*,\s*["'])(?:[^\s;?&,]+|\n[ \t]+\S+)/gm;
@@ -96,6 +99,7 @@ export function sanitizeText(value: string): string {
     next = next.replace(pattern, "[redacted]");
     pattern.lastIndex = 0;
   }
+  next = redactSchemelessUserinfo(next);
   next = next.replace(EMAIL_PATTERN, "[redacted]");
   next = next.replace(SLACK_CHANNEL_PATTERN, "[redacted]");
   return next;
@@ -125,6 +129,7 @@ export function findSecretHits(text: string): string[] {
   if (testAndReset(EMAIL_PATTERN, text)) hits.push("email");
   if (testAndReset(SLACK_CHANNEL_PATTERN, text)) hits.push("channel-id");
   if (hasSecretAssignment(text)) hits.push("assignment");
+  if (hasSchemelessCredentialUri(text)) hits.push("token");
   for (const pattern of TOKEN_PATTERNS) {
     if (testAndReset(pattern, text)) {
       hits.push("token");
@@ -154,6 +159,44 @@ function splitKeyParts(key: string): string[] {
     .replace(/([a-z0-9])([A-Z])/g, "$1\0$2")
     .split(/[\0_-]+/)
     .filter((part) => part.length > 0);
+}
+
+function isCredentialUserinfo(password: string, host: string): boolean {
+  return password.length > CLOCK_PASSWORD_LENGTH || hostLooksLikeDomain(host);
+}
+
+function hostLooksLikeDomain(host: string): boolean {
+  const trimmed = host.replace(/[.,;:!?)]+$/g, "");
+  return /[A-Za-z0-9]\.[A-Za-z0-9]/.test(trimmed);
+}
+
+function redactSchemelessUserinfo(text: string): string {
+  SCHEMELESS_USERINFO.lastIndex = 0;
+  const next = text.replace(
+    SCHEMELESS_USERINFO,
+    (full, lead: string, _user: string, password: string, host: string) => {
+      if (!isCredentialUserinfo(password, host)) return full;
+      return `${lead}[redacted]`;
+    },
+  );
+  SCHEMELESS_USERINFO.lastIndex = 0;
+  return next;
+}
+
+function hasSchemelessCredentialUri(text: string): boolean {
+  SCHEMELESS_USERINFO.lastIndex = 0;
+  let match = SCHEMELESS_USERINFO.exec(text);
+  while (match != null) {
+    const password = match[3];
+    const host = match[4];
+    if (password != null && host != null && isCredentialUserinfo(password, host)) {
+      SCHEMELESS_USERINFO.lastIndex = 0;
+      return true;
+    }
+    match = SCHEMELESS_USERINFO.exec(text);
+  }
+  SCHEMELESS_USERINFO.lastIndex = 0;
+  return false;
 }
 
 function testAndReset(pattern: RegExp, text: string): boolean {

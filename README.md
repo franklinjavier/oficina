@@ -10,7 +10,7 @@ Account A exports locally, pushes the block to **their** public GitHub repo, and
 
 ## Export (account A)
 
-From a Grok Bot agent folder, or a parent that contains many agents:
+Run this from the oficina clone — the checkout that contains `scripts/export-factory.ts`. Pass the Grok Bot agent folder (or a parent of many agents) as `--from`, and the author's templates repo as `--out`:
 
 ```bash
 npx tsx scripts/export-factory.ts --from <path-to-grok-bot-agent-dir> --name <item-slug> --out <their-registry-repo>

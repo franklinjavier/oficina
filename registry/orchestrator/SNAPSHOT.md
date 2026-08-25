@@ -2,7 +2,13 @@
 
 Fictional Grok Bot template for a first-mate-shaped orchestrator named Helm.
 
-Install this item with the official shadcn CLI. There is no custom Oficina installer.
+Install this item with the official shadcn CLI:
+
+```bash
+npx shadcn@latest add franklinjavier/oficina/orchestrator
+```
+
+There is no custom Oficina installer and no custom domain.
 
 ## Included
 

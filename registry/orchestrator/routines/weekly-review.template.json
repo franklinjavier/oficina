@@ -1,0 +1,15 @@
+{
+  "name": "weekly-review",
+  "enabled": false,
+  "schedule": {
+    "kind": "cron",
+    "expr": "0 16 * * 5",
+    "timezone": "UTC"
+  },
+  "skill": "crew-status",
+  "instructions": "Draft a weekly review from crew-status pointers and conversation briefs only. List open handoffs, blocked items, and work that still needs approval. Do not contact people outside this conversation. Do not attach credentials or private memory.",
+  "approvals": {
+    "external_messages": "required",
+    "production_changes": "required"
+  }
+}

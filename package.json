@@ -1,0 +1,9 @@
+{
+  "name": "oficina",
+  "private": true,
+  "description": "shadcn-compatible registry for Grok Bot templates",
+  "scripts": {
+    "build": "npx --yes shadcn@latest build",
+    "validate": "npx --yes shadcn@latest registry validate"
+  }
+}

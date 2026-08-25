@@ -1,0 +1,15 @@
+{
+  "name": "morning-brief",
+  "enabled": false,
+  "schedule": {
+    "kind": "cron",
+    "expr": "0 8 * * 1-5",
+    "timezone": "UTC"
+  },
+  "skill": "route-work",
+  "instructions": "Collect today's intake. Route each item to the specialist whose published description matches. Post a brief in this conversation. If a source is missing, report the gap instead of inventing status. Do not send external messages.",
+  "approvals": {
+    "external_messages": "required",
+    "production_changes": "required"
+  }
+}

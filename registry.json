@@ -1,0 +1,6 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "oficina",
+  "homepage": "https://github.com/franklinjavier/oficina",
+  "include": ["registry/orchestrator/registry.json"]
+}

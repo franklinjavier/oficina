@@ -1,0 +1,15 @@
+{
+  "skills": [
+    {
+      "name": "route-work",
+      "kind": "generic",
+      "path": "skills/route-work.md"
+    },
+    {
+      "name": "crew-status",
+      "kind": "pointer",
+      "ref": "crew-status",
+      "note": "Pointer only. Enable a local crew-status skill if you already have one. This snapshot does not ship private skill bodies."
+    }
+  ]
+}

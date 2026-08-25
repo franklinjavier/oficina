@@ -1,0 +1,19 @@
+name: registry
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  registry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build registry
+        run: npx --yes shadcn@latest build
+      - name: Validate registry
+        run: npx --yes shadcn@latest registry validate

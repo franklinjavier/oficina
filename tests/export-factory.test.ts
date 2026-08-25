@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { exportFactory, parseArgs } from "../scripts/lib/export-factory.ts";
-import { looksLikeSecret } from "../scripts/lib/secrets.ts";
+import { isSecretKey, looksLikeSecret } from "../scripts/lib/secrets.ts";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const FAKE_TOKEN = "sk-test_abcdefghijklmnopqrstuvwxyz123456";
@@ -302,6 +302,132 @@ test("refuses when the source has credential stores", async () => {
   assert.equal(result.error.kind, "credentials");
 
   await assert.rejects(readdir(path.join(out, "registry", "dirty-factory")));
+
+  await rm(source, { recursive: true, force: true });
+  await rm(out, { recursive: true, force: true });
+});
+
+test("refuses OpenSSH key names and .ssh directories", async () => {
+  const cases = [
+    { name: "id_ed25519", write: async (root: string) => writeText(path.join(root, "id_ed25519"), "ssh-key") },
+    { name: "id_ecdsa", write: async (root: string) => writeText(path.join(root, "id_ecdsa"), "ssh-key") },
+    {
+      name: ".ssh",
+      write: async (root: string) => writeText(path.join(root, ".ssh", "config"), "Host *\n"),
+    },
+  ] as const;
+
+  for (const item of cases) {
+    const source = await mkdtemp(path.join(tmpdir(), "oficina-ssh-"));
+    const out = await makeOutDir();
+    await writeJson(path.join(source, "profile.json"), {
+      name: "Quill",
+      title: "Inbox Clerk",
+      description: "Owns intake notes.",
+    });
+    await item.write(source);
+
+    const result = await exportFactory({
+      from: source,
+      name: "ssh-leak",
+      out,
+      dryRun: false,
+    });
+    assert.equal(result.ok, false, item.name);
+    if (!result.ok) {
+      assert.equal(result.error.kind, "credentials");
+    }
+    await assert.rejects(readdir(path.join(out, "registry", "ssh-leak")));
+
+    await rm(source, { recursive: true, force: true });
+    await rm(out, { recursive: true, force: true });
+  }
+});
+
+test("refuses --out when it is this tool repo", async () => {
+  const source = await mkdtemp(path.join(tmpdir(), "oficina-tool-out-"));
+  await writeJson(path.join(source, "profile.json"), {
+    name: "Quill",
+    title: "Inbox Clerk",
+    description: "Owns intake notes.",
+  });
+
+  const result = await exportFactory({
+    from: source,
+    name: "quill",
+    out: repoRoot,
+    dryRun: true,
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.kind, "usage");
+    assert.match(result.error.message, /export-factory\.ts/);
+  }
+
+  await rm(source, { recursive: true, force: true });
+});
+
+test("drops or refuses camelCase and underscored secret keys", async () => {
+  assert.equal(isSecretKey("botToken"), true);
+  assert.equal(isSecretKey("db_password"), true);
+  assert.equal(isSecretKey("TELEGRAM_BOT_TOKEN"), true);
+  assert.equal(isSecretKey("AWS_SECRET_ACCESS_KEY"), true);
+  assert.equal(isSecretKey("author"), false);
+  assert.equal(isSecretKey("locale"), false);
+  assert.equal(
+    looksLikeSecret("123:AAHabcdefghijklmnopqrstuvwxyz"),
+    true,
+  );
+
+  const source = await mkdtemp(path.join(tmpdir(), "oficina-camel-"));
+  const out = await makeOutDir();
+
+  await writeJson(path.join(source, "profile.json"), {
+    name: "Quill",
+    title: "Inbox Clerk",
+    description: "Owns intake notes.",
+  });
+  await writeJson(path.join(source, "settings.json"), {
+    theme: "dark",
+    botToken: "hunter2",
+    db_password: "hunter2",
+  });
+
+  const dropped = await exportFactory({
+    from: source,
+    name: "camel-drop",
+    out,
+    dryRun: false,
+  });
+
+  assert.equal(dropped.ok, true);
+  if (!dropped.ok) return;
+  const settings = JSON.parse(
+    await readFile(path.join(out, "registry", "camel-drop", "settings.json"), "utf8"),
+  ) as Record<string, unknown>;
+  assert.equal(settings.theme, "dark");
+  assert.equal(settings.botToken, undefined);
+  assert.equal(settings.db_password, undefined);
+  const written = await readUtf8Tree(path.join(out, "registry", "camel-drop"));
+  assert.doesNotMatch(written, /hunter2/);
+
+  await writeText(
+    path.join(source, "skills", "secrets.md"),
+    ["# Notes", "", "botToken: leftover", "db_password: leftover", ""].join("\n"),
+  );
+
+  const refused = await exportFactory({
+    from: source,
+    name: "camel-refuse",
+    out,
+    dryRun: false,
+  });
+  assert.equal(refused.ok, false);
+  if (!refused.ok) {
+    assert.equal(refused.error.kind, "credentials");
+  }
+  await assert.rejects(readdir(path.join(out, "registry", "camel-refuse")));
 
   await rm(source, { recursive: true, force: true });
   await rm(out, { recursive: true, force: true });

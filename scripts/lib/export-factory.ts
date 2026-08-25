@@ -62,8 +62,18 @@ const SKIP_DIRS = new Set([
   ".git",
 ]);
 
-const CREDENTIAL_DIRS = new Set(["credentials"]);
-const CREDENTIAL_FILES = new Set(["factory.db", "store.db", "id_rsa"]);
+const CREDENTIAL_DIRS = new Set(["credentials", ".ssh"]);
+const CREDENTIAL_FILES = new Set([
+  "factory.db",
+  "store.db",
+  "id_rsa",
+  "id_dsa",
+  "id_ecdsa",
+  "id_ecdsa_sk",
+  "id_ed25519",
+  "id_ed25519_sk",
+]);
+const EXPORTER_RELATIVE_PATH = path.join("scripts", "export-factory.ts");
 const TEXT_EXTENSIONS = new Set([
   ".css",
   ".html",
@@ -176,6 +186,16 @@ export async function exportFactory(args: CliArgs): Promise<Result<ExportReport>
   }
   const from = path.resolve(args.from);
   const out = path.resolve(args.out);
+  if (await containsExporter(out)) {
+    return {
+      ok: false,
+      error: {
+        kind: "usage",
+        message:
+          "Refusing --out: that directory already contains this exporter (scripts/export-factory.ts). Point --out at your templates repo, not this tool repo.",
+      },
+    };
+  }
   const catalogPath = path.join(out, "registry.json");
   const existingCatalog = await readCatalog(catalogPath, name);
   if (RESERVED_NAMES.has(name) && catalogHasItem(existingCatalog, name)) {
@@ -294,7 +314,10 @@ async function inspectSource(from: string): Promise<Result<true>> {
     const fullPath = path.join(entry.parentPath, entry.name);
     const relative = path.relative(from, fullPath);
     const segments = relative.split(path.sep);
-    if (segments.some((segment) => CREDENTIAL_DIRS.has(segment))) {
+    if (
+      CREDENTIAL_DIRS.has(entry.name) ||
+      segments.some((segment) => CREDENTIAL_DIRS.has(segment))
+    ) {
       findings.push(posixJoin(relative));
       continue;
     }
@@ -668,6 +691,15 @@ function stringField(
 ): string | undefined {
   const value = record[key];
   return typeof value === "string" && value.trim() !== "" ? value : undefined;
+}
+
+async function containsExporter(out: string): Promise<boolean> {
+  try {
+    await access(path.join(out, EXPORTER_RELATIVE_PATH));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function isCredentialStore(fileName: string): boolean {

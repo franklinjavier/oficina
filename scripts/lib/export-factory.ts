@@ -1,7 +1,7 @@
 import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { findSecretHits, sanitizeJson, sanitizeText } from "./secrets.ts";
+import { findSecretHits, looksLikeSecret, sanitizeJson, sanitizeText } from "./secrets.ts";
 
 export type CliArgs = {
   from: string;
@@ -85,7 +85,7 @@ const BINARY_AVATAR_EXTENSIONS = new Set([".jpeg", ".jpg", ".png", ".webp"]);
 export function parseArgs(argv: string[]): Result<CliArgs> {
   let from: string | undefined;
   let name: string | undefined;
-  let out = process.cwd();
+  let out: string | undefined;
   let dryRun = false;
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -104,7 +104,7 @@ export function parseArgs(argv: string[]): Result<CliArgs> {
         break;
       case "--out":
       case "-o":
-        out = next ?? out;
+        out = next;
         index += 1;
         break;
       case "--dry-run":
@@ -130,12 +130,19 @@ export function parseArgs(argv: string[]): Result<CliArgs> {
     }
   }
 
-  if (from == null || from === "" || name == null || name === "") {
+  if (
+    from == null ||
+    from === "" ||
+    name == null ||
+    name === "" ||
+    out == null ||
+    out === ""
+  ) {
     return {
       ok: false,
       error: {
         kind: "usage",
-        message: `Missing required --from and --name.\n\n${usageText()}`,
+        message: `Missing required --from, --name, and --out.\n\n${usageText()}`,
       },
     };
   }
@@ -147,11 +154,11 @@ export function usageText(): string {
   return [
     "Export a sanitized Grok Bot factory as a shadcn registry:block.",
     "",
-    "  npx tsx scripts/export-factory.ts --from <path> --name <slug>",
+    "  npx tsx scripts/export-factory.ts --from <path> --name <slug> --out <their-registry-repo>",
     "",
     "  --from      One agent folder (profile.json) or a parent of many agents",
     "  --name      Registry item slug to write",
-    "  --out       Your registry repo root (default: cwd). Not a publish API.",
+    "  --out       Your registry repo root. Required. Do not write into this tool repo.",
     "  --dry-run   Print the planned block and write nothing",
   ].join("\n");
 }
@@ -436,14 +443,10 @@ function prepareTextFile(
     try {
       const parsed: unknown = JSON.parse(text);
       const profile = pickProfile(parsed);
-      const hits = findSecretHits(JSON.stringify(profile));
-      return {
-        text: `${JSON.stringify(profile, null, 2)}\n`,
-        skip: false,
-        findings: hits,
-      };
+      const rendered = `${JSON.stringify(profile, null, 2)}\n`;
+      return leftoverResult(rendered, false);
     } catch {
-      return { text: sanitizeText(text), skip: false, findings: findSecretHits(text) };
+      return leftoverResult(sanitizeText(text), false);
     }
   }
 
@@ -454,16 +457,24 @@ function prepareTextFile(
       if (isEmptyObject(sanitized)) {
         return { text: "", skip: true, findings: [] };
       }
-      const rendered = `${JSON.stringify(sanitized, null, 2)}\n`;
-      return { text: rendered, skip: false, findings: findSecretHits(rendered) };
+      return leftoverResult(`${JSON.stringify(sanitized, null, 2)}\n`, false);
     } catch {
-      const sanitized = sanitizeText(text);
-      return { text: sanitized, skip: false, findings: findSecretHits(sanitized) };
+      return leftoverResult(sanitizeText(text), false);
     }
   }
 
-  const sanitized = sanitizeText(text);
-  return { text: sanitized, skip: false, findings: findSecretHits(sanitized) };
+  return leftoverResult(sanitizeText(text), false);
+}
+
+function leftoverResult(
+  text: string,
+  skip: boolean,
+): { text: string; skip: boolean; findings: string[] } {
+  return {
+    text,
+    skip,
+    findings: looksLikeSecret(text) ? findSecretHits(text) : [],
+  };
 }
 
 function pickProfile(value: unknown): Record<string, string> {

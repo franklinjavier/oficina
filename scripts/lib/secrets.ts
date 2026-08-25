@@ -42,7 +42,9 @@ const TOKEN_PATTERNS: readonly RegExp[] = [
 ];
 
 const EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
-const SLACK_CHANNEL_PATTERN = /\b[CDG][A-Z0-9]{8,}\b/g;
+const SLACK_CHANNEL_PATTERN = /\b[CDG](?=[A-Z0-9]*[0-9])[A-Z0-9]{8,}\b/g;
+const ASSIGNMENT_PATTERN =
+  /\b(?:access[_-]?key(?:[_-]?id)?|access[_-]?token|api[_-]?key|api[_-]?secret|auth|authorization|bearer|client[_-]?secret|connector[_-]?token|cookie|credential[s]?|email(?:[_-]?address)?|passwd|password|private[_-]?key|refresh[_-]?token|secret|slack[_-]?bot[_-]?token|slack[_-]?token|token|webhook(?:[_-]?(?:key|url))?)\s*[:=]\s*\S+/gi;
 
 export function normalizeKey(key: string): string {
   return key.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -53,22 +55,7 @@ export function isSecretKey(key: string): boolean {
 }
 
 export function looksLikeSecret(value: string): boolean {
-  if (EMAIL_PATTERN.test(value) || SLACK_CHANNEL_PATTERN.test(value)) {
-    EMAIL_PATTERN.lastIndex = 0;
-    SLACK_CHANNEL_PATTERN.lastIndex = 0;
-    return true;
-  }
-  EMAIL_PATTERN.lastIndex = 0;
-  SLACK_CHANNEL_PATTERN.lastIndex = 0;
-  for (const pattern of TOKEN_PATTERNS) {
-    pattern.lastIndex = 0;
-    if (pattern.test(value)) {
-      pattern.lastIndex = 0;
-      return true;
-    }
-    pattern.lastIndex = 0;
-  }
-  return false;
+  return findSecretHits(value).length > 0;
 }
 
 export function sanitizeText(value: string): string {
@@ -104,18 +91,21 @@ export function sanitizeJson(value: unknown): unknown {
 
 export function findSecretHits(text: string): string[] {
   const hits: string[] = [];
-  if (EMAIL_PATTERN.test(text)) hits.push("email");
-  EMAIL_PATTERN.lastIndex = 0;
-  if (SLACK_CHANNEL_PATTERN.test(text)) hits.push("channel-id");
-  SLACK_CHANNEL_PATTERN.lastIndex = 0;
+  if (testAndReset(EMAIL_PATTERN, text)) hits.push("email");
+  if (testAndReset(SLACK_CHANNEL_PATTERN, text)) hits.push("channel-id");
+  if (testAndReset(ASSIGNMENT_PATTERN, text)) hits.push("assignment");
   for (const pattern of TOKEN_PATTERNS) {
-    pattern.lastIndex = 0;
-    if (pattern.test(text)) {
+    if (testAndReset(pattern, text)) {
       hits.push("token");
-      pattern.lastIndex = 0;
       break;
     }
-    pattern.lastIndex = 0;
   }
   return hits;
+}
+
+function testAndReset(pattern: RegExp, text: string): boolean {
+  pattern.lastIndex = 0;
+  const matched = pattern.test(text);
+  pattern.lastIndex = 0;
+  return matched;
 }

@@ -6,6 +6,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { exportFactory, parseArgs } from "../scripts/lib/export-factory.ts";
+import { looksLikeSecret } from "../scripts/lib/secrets.ts";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const FAKE_TOKEN = "sk-test_abcdefghijklmnopqrstuvwxyz123456";
@@ -60,17 +61,23 @@ async function readUtf8Tree(root: string): Promise<string> {
   return chunks.join("\n");
 }
 
-test("parseArgs requires --from and --name", () => {
-  const missingFrom = parseArgs(["--name", "crew"]);
+test("parseArgs requires --from, --name, and --out", () => {
+  const missingFrom = parseArgs(["--name", "crew", "--out", "/tmp/templates"]);
   assert.equal(missingFrom.ok, false);
   if (!missingFrom.ok) {
     assert.equal(missingFrom.error.kind, "usage");
   }
 
-  const missingName = parseArgs(["--from", "/tmp/agent"]);
+  const missingName = parseArgs(["--from", "/tmp/agent", "--out", "/tmp/templates"]);
   assert.equal(missingName.ok, false);
   if (!missingName.ok) {
     assert.equal(missingName.error.kind, "usage");
+  }
+
+  const missingOut = parseArgs(["--from", "/tmp/agent", "--name", "crew"]);
+  assert.equal(missingOut.ok, false);
+  if (!missingOut.ok) {
+    assert.equal(missingOut.error.kind, "usage");
   }
 });
 
@@ -295,6 +302,98 @@ test("refuses when the source has credential stores", async () => {
   assert.equal(result.error.kind, "credentials");
 
   await assert.rejects(readdir(path.join(out, "registry", "dirty-factory")));
+
+  await rm(source, { recursive: true, force: true });
+  await rm(out, { recursive: true, force: true });
+});
+
+test("refuses leftover assignment-style secrets in markdown and yaml", async () => {
+  const source = await mkdtemp(path.join(tmpdir(), "oficina-assign-"));
+  const out = await makeOutDir();
+
+  await writeJson(path.join(source, "profile.json"), {
+    name: "Quill",
+    title: "Inbox Clerk",
+    description: "Owns intake notes.",
+  });
+  await writeText(
+    path.join(source, "skills", "local-notes.md"),
+    ["# Local notes", "", "password: hunter2", ""].join("\n"),
+  );
+  await writeText(
+    path.join(source, "settings.yaml"),
+    ["locale: en", "SLACK_BOT_TOKEN=custom", ""].join("\n"),
+  );
+
+  const result = await exportFactory({
+    from: source,
+    name: "leaky-notes",
+    out,
+    dryRun: false,
+  });
+
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.equal(result.error.kind, "credentials");
+  if (result.error.kind === "credentials") {
+    assert.ok(result.error.findings.some((finding) => finding.includes("local-notes.md")));
+    assert.ok(result.error.findings.some((finding) => finding.includes("settings.yaml")));
+    assert.doesNotMatch(result.error.message, /hunter2/);
+    assert.doesNotMatch(result.error.findings.join("\n"), /hunter2/);
+    assert.doesNotMatch(result.error.findings.join("\n"), /custom/);
+  }
+  await assert.rejects(readdir(path.join(out, "registry", "leaky-notes")));
+
+  const dryRun = await exportFactory({
+    from: source,
+    name: "leaky-notes",
+    out,
+    dryRun: true,
+  });
+  assert.equal(dryRun.ok, false);
+  if (!dryRun.ok) {
+    assert.equal(dryRun.error.kind, "credentials");
+  }
+
+  await rm(source, { recursive: true, force: true });
+  await rm(out, { recursive: true, force: true });
+});
+
+test("does not treat CONFIGURE-style words as Slack channel ids", async () => {
+  assert.equal(looksLikeSecret("CONFIGURE"), false);
+  assert.equal(looksLikeSecret("DEBUGGING"), false);
+  assert.equal(looksLikeSecret("DEPLOYMENT"), false);
+  assert.equal(looksLikeSecret("C0123456789"), true);
+
+  const source = await mkdtemp(path.join(tmpdir(), "oficina-caps-"));
+  const out = await makeOutDir();
+
+  await writeJson(path.join(source, "profile.json"), {
+    name: "Quill",
+    title: "Inbox Clerk",
+    description: "Owns intake notes.",
+  });
+  await writeText(
+    path.join(source, "skills", "desk.md"),
+    "# Desk\n\nCONFIGURE the DEBUGGING path before DEPLOYMENT.\n",
+  );
+
+  const result = await exportFactory({
+    from: source,
+    name: "desk-words",
+    out,
+    dryRun: false,
+  });
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  const skill = await readFile(
+    path.join(out, "registry", "desk-words", "skills", "desk.md"),
+    "utf8",
+  );
+  assert.match(skill, /CONFIGURE/);
+  assert.match(skill, /DEBUGGING/);
+  assert.match(skill, /DEPLOYMENT/);
 
   await rm(source, { recursive: true, force: true });
   await rm(out, { recursive: true, force: true });

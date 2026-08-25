@@ -13,20 +13,18 @@ Account A exports locally, pushes the block to **their** public GitHub repo, and
 From a Grok Bot agent folder, or a parent that contains many agents:
 
 ```bash
-npx tsx scripts/export-factory.ts --from <path-to-grok-bot-agent-dir> --name <item-slug>
+npx tsx scripts/export-factory.ts --from <path-to-grok-bot-agent-dir> --name <item-slug> --out <their-registry-repo>
 ```
 
-That writes a `registry:block` to `registry/<item-slug>/` and updates `registry.json` in the current directory (`--out` to pick another repo root). It copies the safe agent tree: profile, avatar, sanitized settings, automations/routines, skill files that live with the agent, and other non-secret files.
+`--out` is required and must be **your** templates repo, not this tool repo. That writes a `registry:block` to `<their-registry-repo>/registry/<item-slug>/` and updates `<their-registry-repo>/registry.json`. It copies the safe agent tree: profile, avatar, sanitized settings, automations/routines, skill files that live with the agent, and other non-secret files.
 
 It does not copy `memory/`, transcripts, `factory.db`, `store.db`, credentials, or connector tokens. Token-looking strings, emails, and webhook keys are stripped. The command refuses (and `--dry-run` reports) if the source still looks like it contains credentials.
 
 Preview without writing:
 
 ```bash
-npx tsx scripts/export-factory.ts --from <path> --name <item-slug> --dry-run
+npx tsx scripts/export-factory.ts --from <path> --name <item-slug> --out <their-registry-repo> --dry-run
 ```
-
-If you cloned this tool just to run the script, point `--out` at **your** templates repo so this example catalog is left alone.
 
 ## Publish (account A)
 

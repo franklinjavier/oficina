@@ -8,7 +8,7 @@ Install this item with the official shadcn CLI:
 npx shadcn@latest add franklinjavier/oficina/orchestrator
 ```
 
-There is no custom Oficina installer and no custom domain.
+That command writes these files to `oficina/bots/orchestrator/` under the directory where it runs. In shadcn `files[].target`, `~/` is the project cwd, not `$HOME`. There is no custom Oficina installer and no custom domain.
 
 ## Included
 
@@ -28,8 +28,8 @@ There is no custom Oficina installer and no custom domain.
 ## Apply by hand
 
 1. Create a Grok Bot and open **Bot actions → Edit Profile**.
-2. Copy `name`, `title`, and `description` from `profile.json`.
-3. Optionally set the avatar from `avatar.svg`.
+2. Copy `name`, `title`, and `description` from `oficina/bots/orchestrator/profile.json`.
+3. Optionally set the avatar from `oficina/bots/orchestrator/avatar.svg`.
 4. Enable matching skills from `/` or **Settings → Plugins → Yours**. Treat pointer-only entries as hints.
 5. Create routines from the templates after you attach local sources. Leave them disabled until a test run is safe.
 

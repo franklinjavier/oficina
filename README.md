@@ -16,6 +16,8 @@ Example:
 npx shadcn@latest add franklinjavier/oficina/orchestrator
 ```
 
+That command writes `oficina/bots/orchestrator/*` under the directory where it runs. In shadcn `files[].target`, `~/` is the project cwd, not `$HOME`.
+
 Pin a branch, tag, or commit SHA when you need a fixed revision:
 
 ```bash
@@ -52,7 +54,7 @@ It includes profile name/title/description, an optional generic avatar, skill po
 
 It does not include conversation history, private memory, credentials, tokens, or live agent databases.
 
-After `shadcn add`, apply the snapshot by hand in Grok Bot: edit the profile, enable matching skills, and create routines from the templates.
+After `shadcn add`, the files are at `oficina/bots/orchestrator/` in the directory where the command ran. Apply that snapshot by hand in Grok Bot: edit the profile from `oficina/bots/orchestrator/profile.json`, enable matching skills, and create routines from the templates.
 
 ## Build and validate
 

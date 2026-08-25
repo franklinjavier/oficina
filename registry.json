@@ -2,5 +2,56 @@
   "$schema": "https://ui.shadcn.com/schema/registry.json",
   "name": "oficina",
   "homepage": "https://github.com/franklinjavier/oficina",
-  "include": ["registry/orchestrator/registry.json"]
+  "items": [
+    {
+      "name": "orchestrator",
+      "type": "registry:item",
+      "title": "Orchestrator",
+      "description": "Sanitized generic Grok Bot template for a first-mate-shaped fleet orchestrator. Snapshot files only: invented profile, optional avatar, skill pointers, and routine templates with secrets stripped.",
+      "categories": ["grok-bot", "template", "orchestrator"],
+      "meta": {
+        "kind": "grok-bot-template",
+        "role": "orchestrator",
+        "fictional": true
+      },
+      "docs": "Fictional Grok Bot snapshot. Copy profile fields into Bot actions → Edit Profile. Treat skill pointers as enable-list hints, not private skill dumps. Create routines from the templates only after you fill local sources. This item never includes conversation history, learned memory, credentials, or factory.db.",
+      "files": [
+        {
+          "path": "registry/orchestrator/SNAPSHOT.md",
+          "type": "registry:file",
+          "target": "~/oficina/bots/orchestrator/SNAPSHOT.md"
+        },
+        {
+          "path": "registry/orchestrator/profile.json",
+          "type": "registry:file",
+          "target": "~/oficina/bots/orchestrator/profile.json"
+        },
+        {
+          "path": "registry/orchestrator/avatar.svg",
+          "type": "registry:file",
+          "target": "~/oficina/bots/orchestrator/avatar.svg"
+        },
+        {
+          "path": "registry/orchestrator/skills.json",
+          "type": "registry:file",
+          "target": "~/oficina/bots/orchestrator/skills.json"
+        },
+        {
+          "path": "registry/orchestrator/skills/route-work.md",
+          "type": "registry:file",
+          "target": "~/oficina/bots/orchestrator/skills/route-work.md"
+        },
+        {
+          "path": "registry/orchestrator/routines/morning-brief.template.json",
+          "type": "registry:file",
+          "target": "~/oficina/bots/orchestrator/routines/morning-brief.template.json"
+        },
+        {
+          "path": "registry/orchestrator/routines/weekly-review.template.json",
+          "type": "registry:file",
+          "target": "~/oficina/bots/orchestrator/routines/weekly-review.template.json"
+        }
+      ]
+    }
+  ]
 }

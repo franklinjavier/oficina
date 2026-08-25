@@ -15,5 +15,7 @@ jobs:
           node-version: 22
       - name: Build registry
         run: npx --yes shadcn@latest build
+      - name: Check committed public/r
+        run: git diff --exit-code -- public/r
       - name: Validate registry
         run: npx --yes shadcn@latest registry validate

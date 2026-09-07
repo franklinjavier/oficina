@@ -1,9 +1,10 @@
 {
   "name": "oficina",
   "private": true,
-  "description": "shadcn-compatible registry for Grok Bot templates",
+  "description": "Exporter and example shadcn registry for Grok Bot templates",
   "scripts": {
     "build": "npx --yes shadcn@latest build",
-    "validate": "npx --yes shadcn@latest registry validate"
+    "validate": "npx --yes shadcn@latest registry validate",
+    "test": "npx --yes tsx --test tests/*.test.ts"
   }
 }

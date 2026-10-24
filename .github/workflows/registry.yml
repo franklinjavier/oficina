@@ -2,11 +2,16 @@ name: registry
 
 on:
   pull_request:
+    # Draft PRs run nothing: review rounds happen on drafts, and marking the PR ready
+    # (`ready_for_review`) runs the one full check.
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
 
 jobs:
   registry:
+    # Skip draft PRs; push to main keeps running (it has no pull_request).
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
